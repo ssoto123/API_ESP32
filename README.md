@@ -102,6 +102,82 @@ Códigos de estado usados: **200** OK, **400** JSON inválido o campo faltante,
 5. Prueba los comandos de `ejemplos_curl.txt` (cambia la IP por la de tu placa).
 6. Corre el cliente Python: `python cliente_api.py` (cambia `BASE` por tu IP).
 
+## Tres retos (nivel medio-avanzado)
+
+Estos retos se construyen **sobre la API que ya hiciste en la práctica**: mismos
+sensores, mismos endpoints, mismo JSON. No se trata de empezar de cero, sino de
+llevar esa API a un sistema real. Cada reto vale **10 puntos extra** sobre la
+práctica (máximo 30).
+
+> La IA te puede ayudar a escribir código, pero **la evidencia es física**: si no
+> se ve el hardware respondiendo en el laboratorio, el reto no está completo.
+> Además, cada entrega debe incluir un párrafo corto con **qué falló durante las
+> pruebas y cómo lo resolviste** — eso es lo que demuestra que lo entendiste.
+
+### Reto 1. Alarma automática con umbrales que sobreviven al reinicio
+
+Tu API solo responde cuando alguien le pregunta. Haz que **la propia ESP32 vigile
+los sensores y actúe sola**.
+
+**Qué construir:**
+- Nuevo endpoint `POST /api/umbrales` para configurar límites, por ejemplo
+  `{"temp_max": 30, "humedad_min": 40, "luz_min": 20}`. Los umbrales deben
+  guardarse en memoria no volátil (librería `Preferences`/NVS) y **seguir ahí
+  después de reiniciar la placa**.
+- Cuando una lectura cruce un umbral, la ESP32 activa sola un buzzer o un relé
+  (un actuador físico, no solo el LED) y registra el evento.
+- Nuevo endpoint `GET /api/eventos` con la lista de eventos (qué umbral, valor
+  medido y `uptime_s` del momento).
+- El actuador debe apagarse solo cuando la lectura vuelva a rango **con
+  histéresis** (por ejemplo, la alarma se enciende a 30 °C y se apaga hasta bajar
+  a 28 °C), para que no parpadee con el ruido del sensor.
+
+**Evidencia obligatoria:** video corto donde calientas el DHT22 con la mano o
+una secadora, suena el buzzer, y luego **reinicias la ESP32 y muestras que los
+umbrales siguen configurados** (con un `GET` o por el Monitor Serie).
+
+### Reto 2. Red de 3 nodos con tablero en Python que aguanta un nodo caído
+
+Una API sola es un juguete. Conecta **3 ESP32 (3 mesas)** y haz un tablero que
+las lea a todas sin caerse cuando una falle.
+
+**Qué construir:**
+- Protege tu API con un token: el cliente debe enviar el encabezado
+  `X-API-Key: <tu clave>`; sin token o con token inválido la ESP32 responde
+  **401**. Actualiza `cliente_api.py` y `ejemplos_curl.txt` con el token.
+- Un tablero en Python que consulte los 3 nodos **en paralelo** (hilos o
+  `asyncio`), muestre temperatura, humedad y luz de cada uno, y detecte cuál
+  está fuera de línea (timeout de 3 s).
+- Cuando un nodo no responda, el tablero **no se debe cerrar ni bloquear**:
+  marca ese nodo como "sin conexión", conserva su última lectura marcada como
+  desactualizada, sigue leyendo los otros dos, y lo reincorpora solo cuando
+  vuelva.
+- Guarda todas las lecturas en un archivo CSV con fecha, hora, nodo y valores.
+
+**Evidencia obligatoria:** video o registro donde **desconectas un nodo a la
+mitad del monitoreo** y el tablero lo marca fuera de línea sin detenerse, y un
+`curl` sin token que devuelva 401.
+
+### Reto 3. Telemetría a la nube con búfer offline (store-and-forward)
+
+Tu API vive en la red local. Lleva los datos a una **plataforma gratuita en la
+nube** (ThingSpeak, Blynk, Firebase o un broker MQTT) sin perder datos cuando
+el Wi-Fi se caiga.
+
+**Qué construir:**
+- La ESP32 (o el cliente Python, a tu elección) reenvía una lectura a la nube
+  cada 30 s.
+- Cuando no haya Wi-Fi o la nube no responda, las lecturas se guardan en un
+  **búfer circular local** (mínimo 50 lecturas) y **no se pierden**.
+- Al recuperar la conexión, el búfer se reenvía **en orden y sin duplicados**:
+  cada lectura lleva un identificador único o marca de tiempo para que la nube
+  no la cuente dos veces.
+- La nube debe mostrar la gráfica de temperatura y humedad del día.
+
+**Evidencia obligatoria:** apaga el Wi-Fi (o el hotspot) por 2 minutos,
+vuelve a encenderlo y muestra en el tablero de la nube que **el hueco se llenó
+con los datos del búfer y que no hay lecturas duplicadas**.
+
 ## Evaluación
 
 La práctica se evalúa sobre 100 puntos según la rúbrica del documento PDF:
